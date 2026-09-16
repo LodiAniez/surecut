@@ -1,0 +1,61 @@
+<Window x:Class="SureCut.Windows.ButtonWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SureCut"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False" ShowActivated="False" Topmost="True"
+        Width="80" Height="80" WindowStartupLocation="Manual"
+        Focusable="False" AllowDrop="True"
+        FontFamily="{StaticResource UiFont}"
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+  <!-- Padding around the circle leaves room for the drop shadow; the fab itself is Size × Size DIP. -->
+  <Grid x:Name="Root" Margin="16">
+    <Grid x:Name="Fab" Width="48" Height="48" RenderTransformOrigin="0.5,0.5" Cursor="Hand">
+      <Grid.RenderTransform>
+        <ScaleTransform x:Name="FabScale" ScaleX="1" ScaleY="1"/>
+      </Grid.RenderTransform>
+
+      <Ellipse x:Name="Circle" Fill="{DynamicResource SurfaceBrush}" Stroke="{DynamicResource StrokeBrush}" StrokeThickness="1">
+        <Ellipse.Effect>
+          <DropShadowEffect x:Name="Shadow" BlurRadius="24" ShadowDepth="6" Direction="270" Opacity="0.18" Color="Black"/>
+        </Ellipse.Effect>
+      </Ellipse>
+
+      <!-- Burger → × (FAB-2). Lines live in a 20 × 20 box scaled with the button size. -->
+      <Canvas x:Name="Glyph" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Canvas.LayoutTransform>
+          <ScaleTransform x:Name="GlyphScale" ScaleX="1" ScaleY="1"/>
+        </Canvas.LayoutTransform>
+        <Rectangle x:Name="L1" Canvas.Left="4" Canvas.Top="4.6" Width="12" Height="1.8" RadiusX="0.9" RadiusY="0.9"
+                   Fill="{DynamicResource TextBrush}" RenderTransformOrigin="0.5,0.5">
+          <Rectangle.RenderTransform>
+            <TransformGroup>
+              <TranslateTransform x:Name="L1Move"/>
+              <RotateTransform x:Name="L1Rotate"/>
+            </TransformGroup>
+          </Rectangle.RenderTransform>
+        </Rectangle>
+        <Rectangle x:Name="L2" Canvas.Left="4" Canvas.Top="9.1" Width="12" Height="1.8" RadiusX="0.9" RadiusY="0.9"
+                   Fill="{DynamicResource TextBrush}" RenderTransformOrigin="0.5,0.5">
+          <Rectangle.RenderTransform>
+            <ScaleTransform x:Name="L2Scale" ScaleX="1"/>
+          </Rectangle.RenderTransform>
+        </Rectangle>
+        <Rectangle x:Name="L3" Canvas.Left="4" Canvas.Top="13.6" Width="12" Height="1.8" RadiusX="0.9" RadiusY="0.9"
+                   Fill="{DynamicResource TextBrush}" RenderTransformOrigin="0.5,0.5">
+          <Rectangle.RenderTransform>
+            <TransformGroup>
+              <TranslateTransform x:Name="L3Move"/>
+              <RotateTransform x:Name="L3Rotate"/>
+            </TransformGroup>
+          </Rectangle.RenderTransform>
+        </Rectangle>
+      </Canvas>
+    </Grid>
+
+    <!-- Drop-target ring (FAB-8) -->
+    <Ellipse x:Name="DropRing" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" StrokeDashArray="3 2"
+             Margin="-4" Visibility="Collapsed" IsHitTestVisible="False"/>
+  </Grid>
+</Window>

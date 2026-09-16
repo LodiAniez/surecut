@@ -1,0 +1,13 @@
+# Working documents are kept out of the repository on purpose.
+docs/
+
+# Build output
+bin/
+obj/
+publish/
+*.user
+*.suo
+.vs/
+.idea/
+*.swp
+TestResults/
