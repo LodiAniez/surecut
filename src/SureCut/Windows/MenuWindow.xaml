@@ -40,9 +40,15 @@
       <!-- MENU-10 -->
       <Button x:Name="GearButton" Style="{StaticResource GearButtonStyle}" Margin="0,2,0,0" ToolTip="Settings" Click="OnGear"
               AutomationProperties.Name="Settings">
-        <Path Width="16" Height="16" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-              StrokeThickness="1.4" StrokeLineJoin="Round"
-              Data="M8,5.8 A2.2,2.2 0 1 0 8,10.2 A2.2,2.2 0 1 0 8,5.8 Z M8,1.8 V3.5 M8,12.5 V14.2 M1.8,8 H3.5 M12.5,8 H14.2 M3.6,3.6 L4.8,4.8 M11.2,11.2 L12.4,12.4 M12.4,3.6 L11.2,4.8 M4.8,11.2 L3.6,12.4"/>
+        <Grid Width="20" Height="16">
+          <Path Width="16" Height="16" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.4" StrokeLineJoin="Round" HorizontalAlignment="Center"
+                Data="M8,5.8 A2.2,2.2 0 1 0 8,10.2 A2.2,2.2 0 1 0 8,5.8 Z M8,1.8 V3.5 M8,12.5 V14.2 M1.8,8 H3.5 M12.5,8 H14.2 M3.6,3.6 L4.8,4.8 M11.2,11.2 L12.4,12.4 M12.4,3.6 L11.2,4.8 M4.8,11.2 L3.6,12.4"/>
+          <!-- update-available dot -->
+          <Ellipse x:Name="UpdateDot" Width="7" Height="7" Fill="{DynamicResource AccentBrush}" Stroke="{DynamicResource SurfaceSolidBrush}" StrokeThickness="1"
+                   HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-2,0" Visibility="Collapsed"
+                   ToolTip="A new version of SureCut is available"/>
+        </Grid>
       </Button>
     </StackPanel>
   </Border>

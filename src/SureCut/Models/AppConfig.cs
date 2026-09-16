@@ -24,6 +24,9 @@ public sealed class AppConfig
     /// <summary>SET-3a. Null when unbound (combination was taken).</summary>
     public string? Hotkey { get; set; } = "Ctrl+Alt+Space";
 
+    /// <summary>Ask GitHub for a newer release at startup and every few hours. Default ON.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
     public List<Favorite> Favorites { get; set; } = new();
 
     /// <summary>Unknown fields are preserved across rewrites (DATA-3).</summary>

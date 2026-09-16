@@ -101,6 +101,34 @@
           </StackPanel>
           <Button Grid.Column="1" Style="{StaticResource FlatButtonStyle}" Content="Reset position" Margin="12,1,0,0" VerticalAlignment="Top" Click="OnResetPosition"/>
         </Grid>
+        <Border Style="{StaticResource RowDivider}"/>
+
+        <!-- Updates -->
+        <Grid Style="{StaticResource RowStyle}">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel>
+            <TextBlock x:Name="VersionLabel" Style="{StaticResource RowLabel}" Text="SureCut"/>
+            <TextBlock x:Name="UpdateHint" Style="{StaticResource RowHint}" Text=""/>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,1,0,0">
+            <Border x:Name="NewBadge" Style="{StaticResource BadgeStyle}" Visibility="Collapsed" ToolTip="A newer version is available">
+              <TextBlock Style="{StaticResource BadgeTextStyle}" Text="NEW"/>
+            </Border>
+            <Button x:Name="UpdateButton" Style="{StaticResource FlatButtonStyle}" MinWidth="96" Content="Check for updates" Click="OnUpdateClick"
+                    AutomationProperties.Name="Update SureCut"/>
+          </StackPanel>
+        </Grid>
+        <Border Style="{StaticResource RowDivider}"/>
+
+        <Grid Style="{StaticResource RowStyle}">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel>
+            <TextBlock Style="{StaticResource RowLabel}" Text="Check for updates automatically"/>
+            <TextBlock Style="{StaticResource RowHint}" Text="Asks GitHub for the latest release at startup and every few hours. Nothing about you is sent."/>
+          </StackPanel>
+          <ToggleButton x:Name="UpdateSwitch" Grid.Column="1" Style="{StaticResource SwitchStyle}" Margin="12,2,0,0" VerticalAlignment="Top"
+                        AutomationProperties.Name="Check for updates automatically" Click="OnUpdateSwitch"/>
+        </Grid>
 
         <!-- SET-7 -->
         <TextBlock Text="Favorites" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,14,0,6"/>

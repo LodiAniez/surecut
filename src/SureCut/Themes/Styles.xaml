@@ -152,6 +152,49 @@
     </Setter>
   </Style>
 
+  <!-- Primary action (Update) -->
+  <Style x:Key="AccentButtonStyle" TargetType="Button" BasedOn="{StaticResource FlatButtonStyle}">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentInkBrush}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Bg" Property="Opacity" Value="0.9"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Bg" Property="Opacity" Value="0.8"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="Bg" Property="Opacity" Value="0.5"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- "NEW" pill shown next to the Update button -->
+  <Style x:Key="BadgeStyle" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+    <Setter Property="CornerRadius" Value="4"/>
+    <Setter Property="Padding" Value="5,1"/>
+    <Setter Property="Margin" Value="0,4,8,0"/>
+    <Setter Property="VerticalAlignment" Value="Top"/>
+  </Style>
+  <Style x:Key="BadgeTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="10"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentInkBrush}"/>
+  </Style>
+
   <!-- Dashed "Add a program…" -->
   <Style x:Key="AddButtonStyle" TargetType="Button" BasedOn="{StaticResource FlatButtonStyle}">
     <Setter Property="Background" Value="Transparent"/>

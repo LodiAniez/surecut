@@ -35,6 +35,7 @@ public sealed class LauncherHost : IDisposable
     public ThemeService Theme { get; }
     public IconCache Icons { get; }
     public HotkeyService Hotkey { get; } = new();
+    public UpdateService Updates { get; }
     public InputHooks Hooks => _hooks;
 
     public ButtonWindow Button { get; private set; } = null!;
@@ -60,6 +61,7 @@ public sealed class LauncherHost : IDisposable
         Config = config;
         Theme = theme;
         Icons = new IconCache(store.Folder);
+        Updates = new UpdateService(store.Folder);
         EffectivePosition = config.Position;
     }
 
@@ -82,6 +84,8 @@ public sealed class LauncherHost : IDisposable
         _hooks.IsInsideLauncher = IsPointInsideLauncher;
         _hooks.EscapePressed += () => Button.Dispatcher.BeginInvoke(CloseMenu);
         _hooks.ClickedOutside += () => Button.Dispatcher.BeginInvoke(CloseMenu);
+
+        if (Config.CheckForUpdates) Updates.StartPeriodicChecks();
 
         // Preload icons off the critical path so the first menu open is instant.
         Button.Dispatcher.BeginInvoke(() =>
@@ -430,6 +434,24 @@ public sealed class LauncherHost : IDisposable
         Config.StartWithWindows = on;
         StartupService.Apply(on);
         Save();
+    }
+
+    public void SetCheckForUpdates(bool on)
+    {
+        Config.CheckForUpdates = on;
+        if (on) Updates.StartPeriodicChecks(); else Updates.StopPeriodicChecks();
+        Save();
+    }
+
+    /// <summary>Update button: download the latest release and restart into it.</summary>
+    public async Task ApplyUpdateAsync()
+    {
+        if (!Updates.IsUpdateAvailable) { await Updates.CheckAsync(); return; }
+        await Updates.DownloadAndInstallAsync(quit: () =>
+        {
+            Logger.Info("Quitting to apply the update.");
+            Quit();
+        });
     }
 
     public void SetButtonSize(string size)

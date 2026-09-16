@@ -42,6 +42,7 @@ public partial class SettingsWindow : Window
         PreviewKeyDown += OnPreviewKeyDown;
         _host.Theme.Changed += ApplySurface;
         _host.FavoritesChanged += () => { if (IsVisible) { RebuildFavorites(); AutoSize(); } };
+        _host.Updates.Changed += () => Dispatcher.BeginInvoke(RenderUpdate);
     }
 
     private void ApplySurface()
@@ -99,11 +100,37 @@ public partial class SettingsWindow : Window
             SizeSmall.IsChecked = cfg.ButtonSize == "small";
             SizeMedium.IsChecked = cfg.ButtonSize == "medium";
             SizeLarge.IsChecked = cfg.ButtonSize == "large";
+            UpdateSwitch.IsChecked = cfg.CheckForUpdates;
             RenderHotkey();
+            RenderUpdate();
             RebuildFavorites();
         }
         finally { _suppressEvents = false; }
         AutoSize();
+    }
+
+    private void RenderUpdate()
+    {
+        var u = _host.Updates;
+        VersionLabel.Text = $"SureCut {u.Installed}";
+        var available = u.IsUpdateAvailable;
+        NewBadge.Visibility = available && u.State is not (UpdateState.Downloading or UpdateState.ReadyToRestart) ? Visibility.Visible : Visibility.Collapsed;
+        UpdateButton.Style = (Style)FindResource(available ? "AccentButtonStyle" : "FlatButtonStyle");
+        UpdateButton.IsEnabled = u.State is not (UpdateState.Checking or UpdateState.Downloading or UpdateState.ReadyToRestart);
+        UpdateHint.SetResourceReference(ForegroundProperty, u.State == UpdateState.Failed ? "DangerBrush" : "MutedBrush");
+
+        (UpdateHint.Text, UpdateButton.Content) = u.State switch
+        {
+            UpdateState.Idle => ("", "Check for updates"),
+            UpdateState.Checking => ("Checking for updates…", "Checking…"),
+            UpdateState.UpToDate => ("You're up to date.", "Check for updates"),
+            UpdateState.Available => ($"Version {u.Latest} is available.", "Update"),
+            UpdateState.Downloading => ($"Downloading version {u.Latest}… {u.Progress}%", "Updating…"),
+            UpdateState.ReadyToRestart => ("Restarting to finish the update…", "Updating…"),
+            UpdateState.Failed => (u.Error ?? "Something went wrong.", available ? "Try again" : "Check for updates"),
+            _ => ("", "Check for updates"),
+        };
+        if (IsVisible) AutoSize();
     }
 
     private void AutoSize()
@@ -249,6 +276,18 @@ public partial class SettingsWindow : Window
     }
 
     private void OnResetPosition(object sender, RoutedEventArgs e) => _host.ResetPosition();
+
+    private async void OnUpdateClick(object sender, RoutedEventArgs e)
+    {
+        try { await _host.ApplyUpdateAsync(); }
+        catch (Exception ex) { Logger.Error("Update click failed", ex); }
+    }
+
+    private void OnUpdateSwitch(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _host.SetCheckForUpdates(UpdateSwitch.IsChecked == true);
+    }
     private void OnAddProgram(object sender, RoutedEventArgs e) => _host.PickAndAddProgram();
 
     private void OnHotkeyClick(object sender, RoutedEventArgs e)

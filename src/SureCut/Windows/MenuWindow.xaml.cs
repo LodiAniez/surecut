@@ -42,6 +42,14 @@ public partial class MenuWindow : Window
         Deactivated += (_, _) => _host.OnLauncherWindowDeactivated();
         PreviewKeyDown += OnPreviewKeyDown;
         _host.Theme.Changed += ApplySurface;
+        _host.Updates.Changed += () => Dispatcher.BeginInvoke(RenderUpdateDot);
+        RenderUpdateDot();
+    }
+
+    private void RenderUpdateDot()
+    {
+        UpdateDot.Visibility = _host.Updates.IsUpdateAvailable ? Visibility.Visible : Visibility.Collapsed;
+        GearButton.ToolTip = _host.Updates.IsUpdateAvailable ? "Settings · update available" : "Settings";
     }
 
     // ---------------------------------------------------------------- surface (MENU-11)

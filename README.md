@@ -34,6 +34,14 @@ the release build is a self-contained single file.
 > **Windows SmartScreen** may warn that the file is from an unknown publisher the first time you
 > run it. Choose *More info* → *Run anyway*. SureCut is not code-signed yet.
 
+### Updating
+
+SureCut checks the Releases page for a newer version shortly after it starts and every few hours.
+When one exists, a small dot appears on the gear icon in the menu and the Settings panel shows a
+**NEW** badge next to an **Update** button. Click **Update**: SureCut downloads the new
+`SureCut.exe`, closes, replaces itself, and starts again with your favorites and settings intact.
+You can also press **Check for updates** at any time, or turn the automatic check off in Settings.
+
 To uninstall, quit SureCut (right-click the button → **Quit**), turn off *Start with Windows* in
 Settings first if you had it on, and delete the `.exe`. Your settings live in
 `%LOCALAPPDATA%\SureCut`; delete that folder too if you want a full clean-up.
@@ -91,6 +99,8 @@ Open the gear at the bottom of the menu.
 | **Start with Windows** | Adds SureCut to your user's startup programs. No admin rights needed. | On |
 | **Button size** | Small (40 px), Medium (48 px) or Large (56 px). Menu icons scale with it. | Medium |
 | **Reset position** | Puts the button back at the bottom-right of the main monitor. | — |
+| **Update / Check for updates** | Shows the installed version. When a newer release exists the button reads **Update** with a **NEW** badge; clicking it downloads and installs the new version and restarts SureCut. | — |
+| **Check for updates automatically** | Asks GitHub for the latest release at startup and every few hours. Turn off to only check manually. | On |
 | **Favorites** | Rename (click the name), remove (✕), and drag the grip to reorder. | — |
 
 Everything follows your Windows theme: light or dark mode, accent color and transparency
@@ -105,7 +115,9 @@ changes apply live, no restart needed.
 | `%LOCALAPPDATA%\SureCut\log.txt` | A small rolling log, useful when reporting a problem. |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\SureCut` | The *Start with Windows* entry. Removed when you turn the setting off. |
 
-SureCut has no accounts, no cloud sync and no telemetry. Nothing leaves your machine.
+SureCut has no accounts, no cloud sync and no telemetry. The only network request it makes is
+the optional update check, which asks GitHub's public releases feed for the latest version and
+sends nothing about you or your favorites. Turn it off in Settings if you prefer.
 
 ## Troubleshooting
 
@@ -168,7 +180,8 @@ src/SureCut/
                          shortcut mode is keyboard-driven
     SettingsWindow       settings panel beside the menu
   Services/              config store, icon cache, hotkey, low-level input hooks, launch tracker,
-                         monitor/anchor math, launcher, startup (Run key), theme, single instance
+                         monitor/anchor math, launcher, startup (Run key), theme, single instance,
+                         update service (GitHub releases check, download, self-replace helper)
   Interop/               P/Invoke declarations and window-styling helpers
   Themes/Styles.xaml     Fluent-style control templates and default palette
 ```
