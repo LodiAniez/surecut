@@ -289,6 +289,8 @@ public partial class ButtonWindow : Window
         else if (msg == NativeMethods.WM_SETTINGCHANGE || msg == NativeMethods.WM_DWMCOLORIZATIONCOLORCHANGED)
         {
             Dispatcher.BeginInvoke(_host.Theme.Refresh);
+            // Work-area changes (taskbar moved, resized, or switched to auto-hide) arrive here too.
+            if (msg == NativeMethods.WM_SETTINGCHANGE) Dispatcher.BeginInvoke(_host.OnDisplayChanged, DispatcherPriority.Background);
         }
         else if (msg == NativeMethods.WM_DISPLAYCHANGE)
         {

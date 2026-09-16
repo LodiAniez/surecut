@@ -88,6 +88,17 @@ public struct MSLLHOOKSTRUCT
     public IntPtr dwExtraInfo;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public struct APPBARDATA
+{
+    public uint cbSize;
+    public IntPtr hWnd;
+    public uint uCallbackMessage;
+    public uint uEdge;
+    public RECT rc;
+    public IntPtr lParam;
+}
+
 [ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 public interface IShellItemImageFactory
 {
@@ -227,6 +238,7 @@ public static class NativeMethods
     [DllImport("user32.dll")] public static extern IntPtr MonitorFromRect(ref RECT lprc, uint dwFlags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
     [DllImport("user32.dll")] public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string? className, string? windowName);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT lpPoint);
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
     public const int VK_LBUTTON = 0x01;
@@ -243,6 +255,15 @@ public static class NativeMethods
     [DllImport("dwmapi.dll")] public static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMarInset);
     [DllImport("dwmapi.dll")] public static extern int DwmIsCompositionEnabled(out bool enabled);
     [DllImport("dwmapi.dll")] public static extern int DwmGetColorizationColor(out uint pcrColorization, out bool pfOpaqueBlend);
+
+    // ----- app bars (taskbar) -----
+    public const uint ABM_GETSTATE = 4;
+    public const uint ABM_GETTASKBARPOS = 5;
+    public const uint ABM_SETSTATE = 10;
+    public const uint ABM_GETAUTOHIDEBAREX = 11;
+    public const uint ABS_AUTOHIDE = 1;
+    public const uint ABE_LEFT = 0, ABE_TOP = 1, ABE_RIGHT = 2, ABE_BOTTOM = 3;
+    [DllImport("shell32.dll")] public static extern UIntPtr SHAppBarMessage(uint dwMessage, ref APPBARDATA pData);
 
     // ----- shell32 -----
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)] public static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);

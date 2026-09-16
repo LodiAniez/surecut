@@ -67,7 +67,83 @@ public static class Monitors
         if (!NativeMethods.GetMonitorInfo(h, ref info)) return null;
         uint dpi = 96;
         if (NativeMethods.GetDpiForMonitor(h, NativeMethods.MDT_EFFECTIVE_DPI, out var dx, out _) == 0 && dx > 0) dpi = dx;
-        return new MonitorData(h, info.szDevice, info.rcMonitor, info.rcWork, (info.dwFlags & NativeMethods.MONITORINFOF_PRIMARY) != 0, dpi);
+        var work = ExcludeTaskbars(info.rcMonitor, info.rcWork, dpi);
+        return new MonitorData(h, info.szDevice, info.rcMonitor, work, (info.dwFlags & NativeMethods.MONITORINFOF_PRIMARY) != 0, dpi);
+    }
+
+    /// <summary>
+    /// The system work area is not always enough to keep the button clear of the taskbar:
+    /// an auto-hide taskbar is not subtracted at all, and the work area can lag behind a taskbar
+    /// that was just moved or resized. Two passes: registered auto-hide bars on each edge, then
+    /// the actual taskbar windows (primary and per-monitor) that overlap this monitor.
+    /// </summary>
+    private static RECT ExcludeTaskbars(RECT monitor, RECT work, uint dpi)
+    {
+        work = ExcludeAutoHideTaskbars(monitor, work, dpi);
+
+        foreach (var tray in TaskbarWindows())
+        {
+            if (!NativeMethods.IsWindowVisible(tray) || !NativeMethods.GetWindowRect(tray, out var r)) continue;
+            var ix = Math.Min(r.Right, monitor.Right) - Math.Max(r.Left, monitor.Left);
+            var iy = Math.Min(r.Bottom, monitor.Bottom) - Math.Max(r.Top, monitor.Top);
+            if (ix <= 0 || iy <= 0) continue;
+
+            if (r.Width >= r.Height)
+            {
+                if (ix < monitor.Width / 2) continue; // not a bar docked on this monitor
+                if (r.CenterY < monitor.CenterY) work.Top = Math.Max(work.Top, Math.Min(r.Bottom, monitor.Bottom));
+                else work.Bottom = Math.Min(work.Bottom, Math.Max(r.Top, monitor.Top));
+            }
+            else
+            {
+                if (iy < monitor.Height / 2) continue;
+                if (r.CenterX < monitor.CenterX) work.Left = Math.Max(work.Left, Math.Min(r.Right, monitor.Right));
+                else work.Right = Math.Min(work.Right, Math.Max(r.Left, monitor.Left));
+            }
+        }
+        return work;
+    }
+
+    private static IEnumerable<IntPtr> TaskbarWindows()
+    {
+        var primary = NativeMethods.FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_TrayWnd", null);
+        if (primary != IntPtr.Zero) yield return primary;
+
+        var after = IntPtr.Zero;
+        for (var i = 0; i < 16; i++)
+        {
+            var secondary = NativeMethods.FindWindowEx(IntPtr.Zero, after, "Shell_SecondaryTrayWnd", null);
+            if (secondary == IntPtr.Zero) yield break;
+            yield return secondary;
+            after = secondary;
+        }
+    }
+
+    private static RECT ExcludeAutoHideTaskbars(RECT monitor, RECT work, uint dpi)
+    {
+        var fallback = (int)Math.Round(48 * dpi / 96.0); // Windows 11 taskbar height
+        foreach (var edge in new[] { NativeMethods.ABE_LEFT, NativeMethods.ABE_TOP, NativeMethods.ABE_RIGHT, NativeMethods.ABE_BOTTOM })
+        {
+            var data = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), uEdge = edge, rc = monitor };
+            IntPtr bar;
+            try { bar = (IntPtr)(long)(ulong)NativeMethods.SHAppBarMessage(NativeMethods.ABM_GETAUTOHIDEBAREX, ref data); }
+            catch { continue; }
+            if (bar == IntPtr.Zero) continue;
+
+            NativeMethods.GetWindowRect(bar, out var r);
+            var horizontal = edge is NativeMethods.ABE_TOP or NativeMethods.ABE_BOTTOM;
+            var thickness = horizontal ? r.Height : r.Width;
+            if (thickness <= 0 || thickness > (horizontal ? monitor.Height : monitor.Width) / 2) thickness = fallback;
+
+            switch (edge)
+            {
+                case NativeMethods.ABE_LEFT: work.Left = Math.Max(work.Left, monitor.Left + thickness); break;
+                case NativeMethods.ABE_TOP: work.Top = Math.Max(work.Top, monitor.Top + thickness); break;
+                case NativeMethods.ABE_RIGHT: work.Right = Math.Min(work.Right, monitor.Right - thickness); break;
+                case NativeMethods.ABE_BOTTOM: work.Bottom = Math.Min(work.Bottom, monitor.Bottom - thickness); break;
+            }
+        }
+        return work;
     }
 
     /// <summary>
