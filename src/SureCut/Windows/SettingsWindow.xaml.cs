@@ -19,6 +19,9 @@ public partial class SettingsWindow : Window
     private bool _listeningForHotkey;
     private bool _suppressEvents;
 
+    /// <summary>Feedback from the last capture attempt; null means "derive from the bound state".</summary>
+    private string? _hotkeyMessage;
+
     public IntPtr Hwnd => WindowStyling.Handle(this);
 
     public SettingsWindow(LauncherHost host)
@@ -43,20 +46,7 @@ public partial class SettingsWindow : Window
 
     private void ApplySurface()
     {
-        if (!_sourceReady) return;
-        var acrylic = _host.Theme.TransparencyEnabled && WindowStyling.TryApplyAcrylic(this, _host.Theme.IsDark);
-        if (!acrylic)
-        {
-            WindowStyling.RemoveBackdrop(this);
-            WindowStyling.SetImmersiveDarkMode(this, _host.Theme.IsDark);
-            Surface.SetResourceReference(Border.BackgroundProperty, "SurfaceSolidBrush");
-            Surface.BorderThickness = new Thickness(1);
-        }
-        else
-        {
-            Surface.Background = Brushes.Transparent;
-            Surface.BorderThickness = new Thickness(0);
-        }
+        if (_sourceReady) WindowStyling.ApplySurface(this, Surface, _host.Theme);
     }
 
     // ---------------------------------------------------------------- open / close / placement
@@ -88,7 +78,7 @@ public partial class SettingsWindow : Window
         var w = me.Width; var h = me.Height;
         if (w <= 0 || h <= 0) return;
 
-        var pos = _host.Config.Position;
+        var pos = _host.EffectivePosition;
         var gap = (int)Math.Round(GapDip * s);
         var left = pos.AnchorLeft ? menuRect.Right + gap : menuRect.Left - gap - w;
         var top = pos.AnchorTop ? fab.Top : fab.Bottom - h;
@@ -126,6 +116,8 @@ public partial class SettingsWindow : Window
         WindowStyling.SizeToContent(this, Surface, fixedWidth: 300);
     }
 
+    private const string ConflictMessage = "This shortcut is in use by another program.";
+
     private void RenderHotkey()
     {
         if (_listeningForHotkey) { HotkeyButton.Content = "Press a shortcut…"; return; }
@@ -134,7 +126,10 @@ public partial class SettingsWindow : Window
         HotkeyButton.Content = string.IsNullOrEmpty(text) ? "Not set" : text.Replace("+", " + ");
         HotkeyButton.FontStyle = bound ? FontStyles.Normal : FontStyles.Italic;
         HotkeyButton.SetResourceReference(ForegroundProperty, bound ? "TextBrush" : "MutedBrush");
-        HotkeyWarning.Visibility = !bound && !string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
+
+        var message = _hotkeyMessage ?? (!bound && !string.IsNullOrEmpty(text) ? ConflictMessage : null);
+        HotkeyWarning.Text = message ?? "";
+        HotkeyWarning.Visibility = message is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void RebuildFavorites()
@@ -259,6 +254,8 @@ public partial class SettingsWindow : Window
     private void OnHotkeyClick(object sender, RoutedEventArgs e)
     {
         _listeningForHotkey = true;
+        _hotkeyMessage = null;
+        HotkeyWarning.Visibility = Visibility.Collapsed;
         HotkeyButton.SetResourceReference(ForegroundProperty, "AccentBrush");
         HotkeyButton.FontStyle = FontStyles.Normal;
         HotkeyButton.Content = "Press a shortcut…";
@@ -277,19 +274,24 @@ public partial class SettingsWindow : Window
             e.Handled = true;
             var key = e.Key == Key.System ? e.SystemKey : e.Key;
             if (key == Key.Escape) { _listeningForHotkey = false; RenderHotkey(); return; }
-            if (HotkeyCombo.IsModifierKey(key) || key == Key.None) return;
+            if (HotkeyCombo.IsModifierKey(key) || !HotkeyCombo.IsBindableKey(key)) return;
 
             var mods = HotkeyCombo.ModifiersFrom(Keyboard.Modifiers);
             _listeningForHotkey = false;
             if (mods == 0)
             {
-                HotkeyWarning.Text = "Include Ctrl, Alt or Shift in the shortcut.";
-                HotkeyWarning.Visibility = Visibility.Visible;
+                _hotkeyMessage = "Include Ctrl, Alt or Shift in the shortcut.";
                 RenderHotkey();
                 return;
             }
-            HotkeyWarning.Text = "This shortcut is in use by another program.";
-            _host.SetHotkey(HotkeyCombo.Format(mods, key));
+
+            _hotkeyMessage = _host.SetHotkey(HotkeyCombo.Format(mods, key)) switch
+            {
+                HotkeyApplyResult.Bound => null,
+                HotkeyApplyResult.Conflict => ConflictMessage,
+                HotkeyApplyResult.Invalid => "That key can't be used in a shortcut.",
+                _ => null,
+            };
             RenderHotkey();
             return;
         }

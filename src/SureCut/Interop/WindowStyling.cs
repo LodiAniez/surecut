@@ -139,6 +139,28 @@ public static class WindowStyling
         return NativeMethods.DwmSetWindowAttribute(h, NativeMethods.DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int)) == 0;
     }
 
+    /// <summary>
+    /// MENU-11 for the menu and settings windows: Acrylic when the OS and the user's
+    /// Transparency-effects setting allow it, otherwise a solid themed surface with a 1 px border.
+    /// </summary>
+    public static bool ApplySurface(Window w, System.Windows.Controls.Border surface, Services.ThemeService theme)
+    {
+        var acrylic = theme.TransparencyEnabled && TryApplyAcrylic(w, theme.IsDark);
+        if (acrylic)
+        {
+            surface.Background = System.Windows.Media.Brushes.Transparent;
+            surface.BorderThickness = new Thickness(0);
+        }
+        else
+        {
+            RemoveBackdrop(w);
+            SetImmersiveDarkMode(w, theme.IsDark);
+            surface.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "SurfaceSolidBrush");
+            surface.BorderThickness = new Thickness(1);
+        }
+        return acrylic;
+    }
+
     public static void SetImmersiveDarkMode(Window w, bool darkMode)
     {
         int dark = darkMode ? 1 : 0;

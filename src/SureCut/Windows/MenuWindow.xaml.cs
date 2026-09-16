@@ -14,12 +14,11 @@ namespace SureCut.Windows;
 /// <summary>The favorites menu (PRD §5.2): a non-layered tool window with a DWM backdrop.</summary>
 public partial class MenuWindow : Window
 {
-    private const int VisibleCount = 5;
+    public const int VisibleCount = 5;
     private const int GapDip = 10;
 
     private readonly LauncherHost _host;
     private bool _expanded;
-    private bool _acrylic;
     private bool _sourceReady;
 
     public bool KeyboardMode { get; private set; }
@@ -49,21 +48,7 @@ public partial class MenuWindow : Window
 
     private void ApplySurface()
     {
-        if (!_sourceReady) return;
-        var wantAcrylic = _host.Theme.TransparencyEnabled;
-        _acrylic = wantAcrylic && WindowStyling.TryApplyAcrylic(this, _host.Theme.IsDark);
-        if (!_acrylic)
-        {
-            WindowStyling.RemoveBackdrop(this);
-            WindowStyling.SetImmersiveDarkMode(this, _host.Theme.IsDark);
-            Surface.SetResourceReference(Border.BackgroundProperty, "SurfaceSolidBrush");
-            Surface.BorderThickness = new Thickness(1);
-        }
-        else
-        {
-            Surface.Background = Brushes.Transparent;
-            Surface.BorderThickness = new Thickness(0);
-        }
+        if (_sourceReady) WindowStyling.ApplySurface(this, Surface, _host.Theme);
     }
 
     // ---------------------------------------------------------------- open / close
@@ -101,7 +86,7 @@ public partial class MenuWindow : Window
 
     private void Animate()
     {
-        var pos = _host.Config.Position;
+        var pos = _host.EffectivePosition;
         Surface.RenderTransformOrigin = new Point(pos.AnchorLeft ? 0 : 1, pos.AnchorTop ? 0 : 1);
 
         if (!_host.Theme.AnimationsEnabled)
@@ -128,7 +113,7 @@ public partial class MenuWindow : Window
         var w = me.Width; var h = me.Height;
         if (w <= 0 || h <= 0) return;
 
-        var pos = _host.Config.Position;
+        var pos = _host.EffectivePosition;
         var gap = (int)Math.Round(GapDip * s);
         var left = pos.AnchorLeft ? fab.Left : fab.Right - w;
         var top = pos.AnchorTop ? fab.Bottom + gap : fab.Top - gap - h;
@@ -142,7 +127,7 @@ public partial class MenuWindow : Window
     {
         var favorites = _host.Config.Favorites;
         var iconPx = _host.Config.MenuIconPx;
-        var toLeft = !_host.Config.Position.AnchorLeft;
+        var toLeft = !_host.EffectivePosition.AnchorLeft;
 
         Items.Children.Clear();
         for (var i = 0; i < favorites.Count; i++)
@@ -173,19 +158,20 @@ public partial class MenuWindow : Window
 
     private Button CreateItem(Favorite fav, int iconPx, bool tooltipLeft)
     {
+        var missing = fav.IsMissing; // one file-system probe per item per rebuild
         var btn = new Button
         {
             Style = (Style)FindResource("MenuItemButtonStyle"),
             Tag = fav,
             Content = CreateIcon(fav, iconPx),
-            Opacity = fav.IsMissing ? 0.5 : 1.0,
+            Opacity = missing ? 0.5 : 1.0,
         };
-        System.Windows.Automation.AutomationProperties.SetName(btn, fav.Name + (fav.IsMissing ? " (file not found)" : ""));
+        System.Windows.Automation.AutomationProperties.SetName(btn, fav.Name + (missing ? " (file not found)" : ""));
 
         // MENU-6: 400 ms hover tooltip on the side facing the screen center; immediate on keyboard focus.
         var tip = new ToolTip
         {
-            Content = fav.IsMissing ? fav.Name + " — file not found" : fav.Name,
+            Content = missing ? fav.Name + " — file not found" : fav.Name,
             Style = (Style)FindResource("BubbleToolTipStyle"),
             Placement = tooltipLeft ? PlacementMode.Left : PlacementMode.Right,
             PlacementTarget = btn,
@@ -230,7 +216,7 @@ public partial class MenuWindow : Window
     {
         var favorites = _host.Config.Favorites;
         var index = favorites.IndexOf(fav);
-        var toLeft = !_host.Config.Position.AnchorLeft;
+        var toLeft = !_host.EffectivePosition.AnchorLeft;
 
         var menu = new ContextMenu { Style = (Style)FindResource("FluentContextMenuStyle"), Placement = PlacementMode.MousePoint };
         menu.Items.Add(Item("Open", () => _host.Launch(fav, msg => ErrorBubble.Show(anchor, msg, toLeft))));

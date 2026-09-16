@@ -24,10 +24,11 @@ public partial class ButtonWindow : Window
     private readonly DispatcherTimer _holdTimer;
     private readonly DispatcherTimer _dragTimer;
     private HwndSource? _source;
+    private IntPtr _hwnd;
 
     private bool _pressed, _dragging, _open;
     private POINT _pressPoint;
-    private RECT _dragStartRect;
+    private int _dragStartFabLeft, _dragStartFabTop;
 
     public IntPtr Hwnd => new WindowInteropHelper(this).EnsureHandle();
 
@@ -51,7 +52,8 @@ public partial class ButtonWindow : Window
         DragOver += OnDragOver;
         DragLeave += (_, _) => DropRing.Visibility = Visibility.Collapsed;
         Drop += OnDrop;
-        Closed += (_, _) => { _source?.RemoveHook(WndProc); NativeMethods.WTSUnRegisterSessionNotification(Hwnd); };
+        // Use the cached handle: EnsureHandle() throws once the window has been destroyed.
+        Closed += (_, _) => { _source?.RemoveHook(WndProc); if (_hwnd != IntPtr.Zero) NativeMethods.WTSUnRegisterSessionNotification(_hwnd); };
 
         ApplySize();
         _host.Theme.Changed += ApplyTheme;
@@ -61,6 +63,7 @@ public partial class ButtonWindow : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         var h = Hwnd;
+        _hwnd = h;
         NativeMethods.AddExStyle(h, NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_TOPMOST);
         WindowStyling.AllowTinyWindow(this); // the 80 px window must not be clamped to the OS minimum width
         WindowStyling.DeliverClicksWithoutActivation(this, () => true);
@@ -190,7 +193,9 @@ public partial class ButtonWindow : Window
         if (!_pressed || !NativeMethods.IsLeftButtonDown()) { _pressed = false; return; }
         _dragging = true;
         _host.CloseMenu();
-        _dragStartRect = WindowStyling.GetRect(this);
+        var startFab = FabRect; // screen coordinates stay valid even if the DPI changes mid-drag
+        _dragStartFabLeft = startFab.Left;
+        _dragStartFabTop = startFab.Top;
         Cursor = Cursors.SizeAll;
         _dragTimer.Start();
     }
@@ -203,11 +208,13 @@ public partial class ButtonWindow : Window
         var dx = p.X - _pressPoint.X;
         var dy = p.Y - _pressPoint.Y;
 
+        // Size and padding come from the window's *current* DPI (PerMonitorV2 may have resized it).
+        var current = WindowStyling.GetRect(this);
         var pad = (int)Math.Round(PadDip * WindowStyling.ScaleOf(this));
-        var fabW = _dragStartRect.Width - 2 * pad;
-        var fabH = _dragStartRect.Height - 2 * pad;
-        var fabLeft = _dragStartRect.Left + pad + dx;
-        var fabTop = _dragStartRect.Top + pad + dy;
+        var fabW = current.Width - 2 * pad;
+        var fabH = current.Height - 2 * pad;
+        var fabLeft = _dragStartFabLeft + dx;
+        var fabTop = _dragStartFabTop + dy;
 
         // Confine the circle to the work area of the monitor under the cursor.
         var m = Monitors.FromPoint(p.X, p.Y);

@@ -58,6 +58,14 @@ public readonly record struct HotkeyCombo(uint Modifiers, uint VirtualKey, strin
     public static bool IsModifierKey(Key k) => k is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
         or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.System;
 
+    /// <summary>A key that RegisterHotKey can actually bind (has a virtual-key code, is not a modifier or IME marker).</summary>
+    public static bool IsBindableKey(Key k)
+    {
+        if (k is Key.None or Key.System or Key.ImeProcessed or Key.DeadCharProcessed || IsModifierKey(k)) return false;
+        try { return KeyInterop.VirtualKeyFromKey(k) != 0; }
+        catch { return false; }
+    }
+
     public static string KeyName(Key k) => k switch
     {
         Key.Space => "Space",
@@ -105,7 +113,7 @@ public readonly record struct HotkeyCombo(uint Modifiers, uint VirtualKey, strin
         if (raw.Length == 1 && char.IsDigit(raw[0])) { key = Key.D0 + (raw[0] - '0'); return true; }
         if (raw.Length == 1 && char.IsLetter(raw[0])) { key = Key.A + (char.ToUpperInvariant(raw[0]) - 'A'); return true; }
         if (raw.StartsWith("num", StringComparison.OrdinalIgnoreCase) && raw.Length == 4 && char.IsDigit(raw[3])) { key = Key.NumPad0 + (raw[3] - '0'); return true; }
-        return Enum.TryParse(raw, ignoreCase: true, out key) && key != Key.None;
+        return Enum.TryParse(raw, ignoreCase: true, out key) && IsBindableKey(key);
     }
 }
 
@@ -118,7 +126,6 @@ public sealed class HotkeyService : IDisposable
     private HotkeyCombo? _registered;
 
     public bool IsBound => _registered is not null;
-    public string? BoundText => _registered?.Text;
 
     /// <summary>Set when the last registration attempt failed because the combination is in use.</summary>
     public bool LastAttemptConflicted { get; private set; }
@@ -148,11 +155,14 @@ public sealed class HotkeyService : IDisposable
     /// <summary>Re-registers after sleep / unlock, when some shells drop hotkeys.</summary>
     public void Reassert()
     {
-        if (_registered is { } c && _hwnd != IntPtr.Zero)
-        {
-            NativeMethods.UnregisterHotKey(_hwnd, HotkeyId);
-            NativeMethods.RegisterHotKey(_hwnd, HotkeyId, c.Modifiers | NativeMethods.MOD_NOREPEAT, c.VirtualKey);
-        }
+        if (_registered is not { } c || _hwnd == IntPtr.Zero) return;
+        NativeMethods.UnregisterHotKey(_hwnd, HotkeyId);
+        if (NativeMethods.RegisterHotKey(_hwnd, HotkeyId, c.Modifiers | NativeMethods.MOD_NOREPEAT, c.VirtualKey)) return;
+
+        var err = Marshal.GetLastWin32Error();
+        LastAttemptConflicted = err == 1409;
+        _registered = null; // IsBound now reports the truth and Settings shows the warning
+        Logger.Warn($"Hotkey {c.Text} could not be re-registered after unlock/resume: error {err}");
     }
 
     public void Unregister()

@@ -53,15 +53,27 @@ public sealed class ConfigStore
             var cfg = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions);
             if (cfg is null) throw new JsonException("config deserialized to null");
             if (cfg.Version > AppConfig.CurrentVersion)
-                throw new JsonException($"config version {cfg.Version} is newer than supported {AppConfig.CurrentVersion}");
+            {
+                // Written by a newer SureCut. Unknown fields survive via [JsonExtensionData]; keep a
+                // one-time copy so nothing is lost if this version rewrites the file.
+                Logger.Warn($"Config version {cfg.Version} is newer than this build supports ({AppConfig.CurrentVersion}); loading what is understood.");
+                var keep = path + $".v{cfg.Version}.bak";
+                if (!File.Exists(keep)) File.Copy(path, keep);
+            }
 
             cfg.Position ??= ButtonPosition.Default();
+            cfg.Position.Normalize();
+            cfg.ButtonSize = AppConfig.NormalizeSize(cfg.ButtonSize);
+            if (string.IsNullOrWhiteSpace(cfg.Hotkey)) cfg.Hotkey = null;
             cfg.Favorites ??= new List<Favorite>();
             cfg.Favorites.RemoveAll(f => f is null || string.IsNullOrWhiteSpace(f.Target));
             foreach (var f in cfg.Favorites)
             {
                 if (string.IsNullOrWhiteSpace(f.Id)) f.Id = Guid.NewGuid().ToString("N");
                 if (string.IsNullOrWhiteSpace(f.Name)) f.Name = Path.GetFileNameWithoutExtension(f.Target);
+                f.Args ??= "";
+                f.WorkingDir ??= "";
+                f.IconCache ??= "";
             }
             return cfg;
         }
@@ -98,7 +110,7 @@ public sealed class ConfigStore
         var tmp = path + ".tmp";
         try
         {
-            cfg.Version = AppConfig.CurrentVersion;
+            cfg.Version = Math.Max(cfg.Version, AppConfig.CurrentVersion); // never downgrade a newer file's marker
             var json = JsonSerializer.Serialize(cfg, JsonOptions);
             using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
             using (var sw = new StreamWriter(fs))

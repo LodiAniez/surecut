@@ -60,7 +60,7 @@ public sealed class IconCache
         }
         catch (Exception ex)
         {
-            Logger.Warn($"Icon extraction failed for {f.Target}: {ex.Message}");
+            Logger.Warn($"Icon extraction failed for {f.Target}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
             return null;
         }
     }
@@ -71,8 +71,6 @@ public sealed class IconCache
         TryDelete(SmallPath(f));
         TryDelete(LargePath(f));
     }
-
-    public void Invalidate(Favorite f) => _memory.Remove(f.Id);
 
     private string SmallPath(Favorite f) => Path.Combine(_iconsFolder, f.Id + ".png");
     private string LargePath(Favorite f) => Path.Combine(_iconsFolder, f.Id + "@2x.png");
@@ -96,10 +94,19 @@ public sealed class IconCache
         try
         {
             var src = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-            // The shell returns a premultiplied 32bpp bitmap; convert so alpha is honored when rendering.
-            var converted = new FormatConvertedBitmap(src, PixelFormats.Pbgra32, null, 0);
-            converted.Freeze();
-            return converted;
+
+            // IShellItemImageFactory returns a 32bpp *premultiplied* ARGB DIB, but the HBITMAP import
+            // labels it as straight-alpha Bgra32. Reinterpret the same bytes as Pbgra32 instead of
+            // converting (which would premultiply a second time and darken every soft edge).
+            BitmapSource bgra = src.Format == PixelFormats.Bgra32 ? src : new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            var w = bgra.PixelWidth;
+            var h = bgra.PixelHeight;
+            var stride = w * 4;
+            var pixels = new byte[stride * h];
+            bgra.CopyPixels(pixels, stride, 0);
+            var result = BitmapSource.Create(w, h, 96, 96, PixelFormats.Pbgra32, null, pixels, stride);
+            result.Freeze();
+            return result;
         }
         finally
         {

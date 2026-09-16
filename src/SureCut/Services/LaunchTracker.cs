@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using SureCut.Interop;
@@ -19,6 +20,7 @@ public sealed class LaunchTracker : IDisposable
     private DispatcherTimer? _timeout, _poll;
 
     private uint _launchedPid, _previousForegroundPid;
+    private DateTime _launchedAt;
     private IntPtr _trackedWindow;
 
     /// <summary>The launched program's window appeared (hide the button now).</summary>
@@ -27,15 +29,11 @@ public sealed class LaunchTracker : IDisposable
     /// <summary>The tracked window is gone (show the button again).</summary>
     public event Action? WindowClosed;
 
-    /// <summary>No qualifying window showed up within the timeout (leave the button visible).</summary>
-    public event Action? GaveUp;
-
-    public bool IsTracking => _trackedWindow != IntPtr.Zero;
-
     public void Begin(uint launchedPid, IntPtr previousForeground)
     {
         Cancel();
         _launchedPid = launchedPid;
+        _launchedAt = DateTime.Now;
         _previousForegroundPid = previousForeground == IntPtr.Zero ? 0 : NativeMethods.ProcessIdOf(previousForeground);
 
         _foregroundProc = OnForeground;
@@ -46,8 +44,7 @@ public sealed class LaunchTracker : IDisposable
         _timeout.Tick += (_, _) =>
         {
             StopWaitingForWindow();
-            Logger.Info("Launch tracker: no window appeared within timeout.");
-            GaveUp?.Invoke();
+            Logger.Info("Launch tracker: no window appeared within timeout; button stays visible.");
         };
         _timeout.Start();
     }
@@ -58,9 +55,15 @@ public sealed class LaunchTracker : IDisposable
         var pid = NativeMethods.ProcessIdOf(hwnd);
         if (pid == 0 || pid == _ownPid) return;
 
-        var qualifies = pid == _launchedPid
-                        || (_launchedPid != 0 && IsDescendant(pid, _launchedPid))
-                        || (pid != _previousForegroundPid);
+        // 1. The launched process itself or something it spawned.
+        var qualifies = pid == _launchedPid || (_launchedPid != 0 && IsDescendant(pid, _launchedPid));
+
+        // 2. Hand-off case (stub exits, packaged app, single-instance broker): accept a window only
+        //    from a process that did not exist before the launch. Old processes coming to the
+        //    front (toasts, the user's browser) are never mistaken for the launched program.
+        if (!qualifies)
+            qualifies = pid != _previousForegroundPid && StartedAfterLaunch(pid);
+
         if (!qualifies) return;
 
         StopWaitingForWindow();
@@ -75,6 +78,19 @@ public sealed class LaunchTracker : IDisposable
         _poll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _poll.Tick += (_, _) => { if (!NativeMethods.IsWindow(_trackedWindow)) Closed(); };
         _poll.Start();
+    }
+
+    private bool StartedAfterLaunch(uint pid)
+    {
+        try
+        {
+            using var p = Process.GetProcessById((int)pid);
+            return p.StartTime >= _launchedAt.AddSeconds(-2);
+        }
+        catch
+        {
+            return false; // exited, or a protected process we cannot inspect
+        }
     }
 
     private void OnDestroy(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)

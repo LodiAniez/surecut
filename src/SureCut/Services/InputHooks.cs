@@ -19,6 +19,12 @@ public sealed class InputHooks : IDisposable
     /// <summary>When true, outside clicks are ignored (a context menu or dialog owns the interaction).</summary>
     public bool Suspended { get; set; }
 
+    /// <summary>
+    /// When false, Esc passes through untouched. Set while the settings window is active, since
+    /// it receives keys natively and needs Esc for cancelling a shortcut capture.
+    /// </summary>
+    public bool HandleEscape { get; set; } = true;
+
     public event Action? EscapePressed;
     public event Action? ClickedOutside;
 
@@ -54,7 +60,7 @@ public sealed class InputHooks : IDisposable
 
     private IntPtr KeyboardProc(int code, IntPtr wParam, IntPtr lParam)
     {
-        if (code >= 0 && !Suspended && (wParam == (IntPtr)NativeMethods.WM_KEYDOWN || wParam == (IntPtr)NativeMethods.WM_SYSKEYDOWN))
+        if (code >= 0 && !Suspended && HandleEscape && (wParam == (IntPtr)NativeMethods.WM_KEYDOWN || wParam == (IntPtr)NativeMethods.WM_SYSKEYDOWN))
         {
             var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
             if (data.vkCode == NativeMethods.VK_ESCAPE)

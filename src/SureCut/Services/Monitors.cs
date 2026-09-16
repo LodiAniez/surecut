@@ -25,9 +25,20 @@ public static class Monitors
         return list;
     }
 
+    /// <summary>
+    /// Used when enumeration returns nothing (remote-session disconnect, topology transitions):
+    /// a stand-in so callers keep working until WM_DISPLAYCHANGE brings the real monitors back.
+    /// </summary>
+    private static readonly MonitorData Fallback = new(IntPtr.Zero, "", new RECT { Right = 1920, Bottom = 1080 }, new RECT { Right = 1920, Bottom = 1040 }, true, 96);
+
     public static MonitorData Primary()
     {
         var all = All();
+        if (all.Count == 0)
+        {
+            Logger.Warn("No monitors enumerated; using a stand-in until the display topology settles.");
+            return Fallback;
+        }
         return all.FirstOrDefault(m => m.IsPrimary) ?? all[0];
     }
 
@@ -46,12 +57,6 @@ public static class Monitors
     public static MonitorData FromRect(RECT r)
     {
         var h = NativeMethods.MonitorFromRect(ref r, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        return FromHandle(h) ?? Primary();
-    }
-
-    public static MonitorData FromWindow(IntPtr hwnd)
-    {
-        var h = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
         return FromHandle(h) ?? Primary();
     }
 

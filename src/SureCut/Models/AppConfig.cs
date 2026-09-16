@@ -30,17 +30,27 @@ public sealed class AppConfig
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
 
+    public const string SizeSmall = "small", SizeMedium = "medium", SizeLarge = "large";
+
+    /// <summary>Maps any input to one of the three valid sizes (unknown → medium).</summary>
+    public static string NormalizeSize(string? size) => size?.Trim().ToLowerInvariant() switch
+    {
+        SizeSmall => SizeSmall,
+        SizeLarge => SizeLarge,
+        _ => SizeMedium,
+    };
+
     public int ButtonSizePx => ButtonSize switch
     {
-        "small" => 40,
-        "large" => 56,
+        SizeSmall => 40,
+        SizeLarge => 56,
         _ => 48,
     };
 
     public int MenuIconPx => ButtonSize switch
     {
-        "small" => 28,
-        "large" => 36,
+        SizeSmall => 28,
+        SizeLarge => 36,
         _ => 32,
     };
 }
@@ -60,15 +70,21 @@ public sealed class ButtonPosition
     public double OffsetX { get; set; } = 20;
     public double OffsetY { get; set; } = 20;
 
-    [JsonIgnore] public bool AnchorTop => Anchor.StartsWith("top", StringComparison.Ordinal);
-    [JsonIgnore] public bool AnchorLeft => Anchor.EndsWith("left", StringComparison.Ordinal);
+    [JsonIgnore] public bool AnchorTop => Anchor?.StartsWith("top", StringComparison.Ordinal) == true;
+    [JsonIgnore] public bool AnchorLeft => Anchor?.EndsWith("left", StringComparison.Ordinal) == true;
+
+    public static readonly string[] ValidAnchors = { "bottom-right", "bottom-left", "top-right", "top-left" };
 
     public static ButtonPosition Default() => new();
 
-    public ButtonPosition Clone() => new()
+    /// <summary>Repairs anything a hand-edited or damaged file could contain (DATA-3).</summary>
+    public void Normalize()
     {
-        Monitor = Monitor, Anchor = Anchor, OffsetX = OffsetX, OffsetY = OffsetY,
-    };
+        Monitor ??= "";
+        if (!ValidAnchors.Contains(Anchor)) Anchor = "bottom-right";
+        if (double.IsNaN(OffsetX) || double.IsInfinity(OffsetX) || OffsetX < 0) OffsetX = 20;
+        if (double.IsNaN(OffsetY) || double.IsInfinity(OffsetY) || OffsetY < 0) OffsetY = 20;
+    }
 }
 
 /// <summary>FAV-4.</summary>

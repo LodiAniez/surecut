@@ -45,6 +45,9 @@ public partial class App : Application
         _theme = new ThemeService();
         _host = new LauncherHost(_store, config, _theme);
         _host.Start();
+
+        // Sign-out / shutdown can end the process before the 500 ms save debounce fires.
+        Microsoft.Win32.SystemEvents.SessionEnding += (_, _) => _host?.FlushNow();
     }
 
     /// <summary>LIFE-2: log, keep running, but give up on a crash loop (3 within 60 s).</summary>

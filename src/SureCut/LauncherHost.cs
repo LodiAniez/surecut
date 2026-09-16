@@ -22,6 +22,11 @@ public sealed class LauncherHost : IDisposable
     private readonly ConfigStore _store;
     private readonly LaunchTracker _tracker = new();
     private readonly InputHooks _hooks = new();
+
+    /// <summary>
+    /// The foreign window that had focus before the launcher took it (keyboard mode, settings,
+    /// or a context menu). Zero when the launcher never took focus. Restored when we let go.
+    /// </summary>
     private IntPtr _previousForeground;
     private bool _contextMenuOpen;
     private bool _quitting;
@@ -36,6 +41,13 @@ public sealed class LauncherHost : IDisposable
     public MenuWindow? Menu { get; private set; }
     public SettingsWindow? Settings { get; private set; }
 
+    /// <summary>
+    /// Where the button actually is right now. Equals <see cref="AppConfig.Position"/> unless the
+    /// stored monitor is missing or the stored spot is off-screen, in which case this is the
+    /// temporary default and the stored position is left untouched (DATA-4).
+    /// </summary>
+    public ButtonPosition EffectivePosition { get; private set; }
+
     public bool MenuOpen { get; private set; }
     public bool SettingsOpen { get; private set; }
     public bool KeyboardMode => Menu?.KeyboardMode ?? false;
@@ -48,6 +60,7 @@ public sealed class LauncherHost : IDisposable
         Config = config;
         Theme = theme;
         Icons = new IconCache(store.Folder);
+        EffectivePosition = config.Position;
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -56,7 +69,7 @@ public sealed class LauncherHost : IDisposable
     {
         Button = new ButtonWindow(this);
         WindowStyling.ShowNoActivate(Button);
-        PlaceButtonFromConfig(save: true);
+        PlaceButton();
 
         Hotkey.Attach(Button.Hwnd);
         Hotkey.Apply(Config.Hotkey);
@@ -96,6 +109,9 @@ public sealed class LauncherHost : IDisposable
         Application.Current.Shutdown();
     }
 
+    /// <summary>Called on sign-out/shutdown so the debounced save is not lost.</summary>
+    public void FlushNow() => _store.Flush();
+
     public void Dispose()
     {
         _hooks.Dispose();
@@ -123,8 +139,7 @@ public sealed class LauncherHost : IDisposable
             else return;
         }
 
-        _previousForeground = keyboard ? NativeMethods.GetForegroundWindow() : IntPtr.Zero;
-        if (IsOurWindow(_previousForeground)) _previousForeground = IntPtr.Zero;
+        if (keyboard) RememberForeground();
 
         Menu ??= new MenuWindow(this);
         Menu.Open(keyboard);
@@ -139,18 +154,30 @@ public sealed class LauncherHost : IDisposable
     {
         if (!MenuOpen) return;
         _hooks.Uninstall();
-        if (SettingsOpen) { Settings?.CloseSettings(); SettingsOpen = false; }
+        _hooks.HandleEscape = true;
+        if (SettingsOpen) { SettingsOpen = false; Settings?.CloseSettings(); }
         Menu?.CloseMenu();
         MenuOpen = false;
         Button.SetOpenState(false);
-
-        // ARCH-5 / ARCH-7: hand focus back to whoever had it.
-        if (_previousForeground != IntPtr.Zero && NativeMethods.IsWindow(_previousForeground))
-            NativeMethods.SetForegroundWindow(_previousForeground);
-        _previousForeground = IntPtr.Zero;
+        RestoreForeground();
     }
 
-    /// <summary>Keyboard mode only: both launcher windows lost activation, so the user went elsewhere.</summary>
+    /// <summary>Records the user's window before the launcher activates one of its own (ARCH-5 / ARCH-7).</summary>
+    private void RememberForeground()
+    {
+        if (_previousForeground != IntPtr.Zero) return;
+        var fg = NativeMethods.GetForegroundWindow();
+        if (fg != IntPtr.Zero && !IsOurWindow(fg)) _previousForeground = fg;
+    }
+
+    private void RestoreForeground()
+    {
+        var prev = _previousForeground;
+        _previousForeground = IntPtr.Zero;
+        if (prev != IntPtr.Zero && NativeMethods.IsWindow(prev)) NativeMethods.SetForegroundWindow(prev);
+    }
+
+    /// <summary>An activated launcher window lost activation, so the user may have gone elsewhere.</summary>
     public void OnLauncherWindowDeactivated()
     {
         if (!MenuOpen || _contextMenuOpen) return;
@@ -159,6 +186,7 @@ public sealed class LauncherHost : IDisposable
         Button.Dispatcher.BeginInvoke(() =>
         {
             if (!MenuOpen || _contextMenuOpen) return;
+            if (!KeyboardMode && !SettingsOpen) return; // settings were closed on purpose meanwhile
             var menuActive = Menu?.IsActive == true;
             var settingsActive = Settings?.IsActive == true;
             if (!menuActive && !settingsActive && !IsOurWindow(NativeMethods.GetForegroundWindow()))
@@ -178,29 +206,29 @@ public sealed class LauncherHost : IDisposable
     public void OpenSettings()
     {
         if (!MenuOpen) OpenMenu(keyboard: false);
-        if (_previousForeground == IntPtr.Zero)
-        {
-            var fg = NativeMethods.GetForegroundWindow();
-            if (!IsOurWindow(fg)) _previousForeground = fg;
-        }
+        RememberForeground();
         Settings ??= new SettingsWindow(this);
-        Settings.Open();
         SettingsOpen = true;
+        _hooks.HandleEscape = false; // the settings window handles Esc itself while it has focus
+        Settings.Open();
     }
 
     public void CloseSettings()
     {
         if (!SettingsOpen) return;
+        SettingsOpen = false;            // before Hide(): Deactivated fires synchronously
+        _hooks.HandleEscape = true;
         Settings?.CloseSettings();
-        SettingsOpen = false;
         if (Menu is { KeyboardMode: true }) Menu.Activate();
+        else if (_previousForeground != IntPtr.Zero && NativeMethods.IsWindow(_previousForeground))
+            NativeMethods.SetForegroundWindow(_previousForeground); // menu stays open, user gets focus back
     }
 
     /// <summary>Opens a WPF context menu from a window that may not be active (MENU-9, SET-8).</summary>
     public void ShowContextMenu(ContextMenu menu, Window owner)
     {
-        var prev = NativeMethods.GetForegroundWindow();
-        var weWereForeground = IsOurWindow(prev);
+        var weWereForeground = IsOurWindow(NativeMethods.GetForegroundWindow());
+        RememberForeground();
         _contextMenuOpen = true;
         _hooks.Suspended = true;
 
@@ -211,8 +239,12 @@ public sealed class LauncherHost : IDisposable
             _hooks.Suspended = false;
             Button.Dispatcher.BeginInvoke(() =>
             {
-                if (SettingsOpen || KeyboardMode || _quitting) return;
-                if (!weWereForeground && prev != IntPtr.Zero && NativeMethods.IsWindow(prev)) NativeMethods.SetForegroundWindow(prev);
+                // Give focus back only if we still hold it: a launch or an opened settings
+                // window has already decided who owns the foreground.
+                if (_quitting || SettingsOpen || KeyboardMode || !MenuOpen) return;
+                var prev = _previousForeground;
+                if (prev != IntPtr.Zero && NativeMethods.IsWindow(prev) && IsOurWindow(NativeMethods.GetForegroundWindow()))
+                    NativeMethods.SetForegroundWindow(prev);
             }, DispatcherPriority.Background);
         };
 
@@ -225,7 +257,9 @@ public sealed class LauncherHost : IDisposable
 
     public void Launch(Favorite f, Action<string> onError)
     {
-        var foregroundBefore = KeyboardMode || SettingsOpen ? _previousForeground : NativeMethods.GetForegroundWindow();
+        var foregroundBefore = _previousForeground != IntPtr.Zero ? _previousForeground : NativeMethods.GetForegroundWindow();
+        if (IsOurWindow(foregroundBefore)) foregroundBefore = IntPtr.Zero;
+
         var result = ProgramLauncher.Launch(f);
         if (!result.Success)
         {
@@ -290,7 +324,7 @@ public sealed class LauncherHost : IDisposable
     }
 
     private void ErrorBubbleOnButton(string text) =>
-        Controls.ErrorBubble.Show(Button.Fab, text, toLeft: !Config.Position.AnchorLeft);
+        Controls.ErrorBubble.Show(Button.Fab, text, toLeft: !EffectivePosition.AnchorLeft);
 
     public void RemoveFavorite(Favorite f)
     {
@@ -321,13 +355,18 @@ public sealed class LauncherHost : IDisposable
         RaiseFavoritesChanged();
     }
 
+    /// <summary>
+    /// A rename only changes a label: the menu is rebuilt for its tooltips, but the settings rows
+    /// are left alone. The row's own text box already shows the new name, and rebuilding here
+    /// would detach whatever control the user clicked to commit the edit.
+    /// </summary>
     public void RenameFavorite(Favorite f, string name)
     {
         name = name.Trim();
         if (string.IsNullOrEmpty(name) || name == f.Name) return;
         f.Name = name;
         Save();
-        RaiseFavoritesChanged();
+        if (Menu is not null && MenuOpen) Menu.Rebuild();
     }
 
     public void PickAndAddProgram()
@@ -363,9 +402,18 @@ public sealed class LauncherHost : IDisposable
         if (Menu is not null && MenuOpen)
         {
             Menu.Rebuild();
-            if (expandIfNeeded && Config.Favorites.Count > 5) Menu.SetExpanded(true);
+            if (expandIfNeeded && Config.Favorites.Count > MenuWindow.VisibleCount) Menu.SetExpanded(true);
         }
         FavoritesChanged?.Invoke();
+    }
+
+    /// <summary>Re-lays out whatever is open after the button moved or resized.</summary>
+    private void RefreshOpenWindows()
+    {
+        if (!MenuOpen || Menu is null) return;
+        Menu.Rebuild();
+        Menu.Reposition();
+        Settings?.Reposition();
     }
 
     // ---------------------------------------------------------------- settings (5.4)
@@ -386,17 +434,22 @@ public sealed class LauncherHost : IDisposable
 
     public void SetButtonSize(string size)
     {
-        if (size is not ("small" or "medium" or "large") || size == Config.ButtonSize) return;
+        size = AppConfig.NormalizeSize(size);
+        if (size == Config.ButtonSize) return;
         Config.ButtonSize = size;
         Button.ApplySize();
         Button.Dispatcher.BeginInvoke(() =>
         {
-            PlaceButtonFromConfig(save: false);
-            if (MenuOpen && Menu is not null) { Menu.Rebuild(); Menu.Reposition(); Settings?.Reposition(); }
+            PlaceButton();
+            RefreshOpenWindows();
         }, DispatcherPriority.Loaded);
         Save();
     }
 
+    /// <summary>
+    /// Tries the new combination first; the previous one is kept (and re-registered) if the new
+    /// one cannot be bound, so a conflict never leaves the user without a shortcut (SET-3a).
+    /// </summary>
     public HotkeyApplyResult SetHotkey(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -408,32 +461,52 @@ public sealed class LauncherHost : IDisposable
         }
         if (!HotkeyCombo.TryParse(text, out var combo)) return HotkeyApplyResult.Invalid;
 
-        Config.Hotkey = combo.Text;
-        Save();
-        if (Hotkey.Apply(combo.Text)) return HotkeyApplyResult.Bound;
-        return Hotkey.LastAttemptConflicted ? HotkeyApplyResult.Conflict : HotkeyApplyResult.Invalid;
+        var previous = Config.Hotkey;
+        if (Hotkey.Apply(combo.Text))
+        {
+            Config.Hotkey = combo.Text;
+            Save();
+            return HotkeyApplyResult.Bound;
+        }
+
+        var result = Hotkey.LastAttemptConflicted ? HotkeyApplyResult.Conflict : HotkeyApplyResult.Invalid;
+        if (!string.IsNullOrEmpty(previous)) Hotkey.Apply(previous);
+        return result;
     }
 
     // ---------------------------------------------------------------- position (FAB-1, FAB-6, SET-6, DATA-4)
 
-    private void PlaceButtonFromConfig(bool save)
+    /// <summary>
+    /// Places the button at the stored position, or at a temporary default when the stored
+    /// monitor is missing or the spot is off-screen. Only the very first run persists the
+    /// default; later fallbacks are transient so the user's spot survives dock/undock.
+    /// </summary>
+    private void PlaceButton()
     {
         var firstRun = string.IsNullOrEmpty(Config.Position.Monitor);
         var (monitor, pos) = Monitors.Resolve(Config.Position, Config.ButtonSizePx);
         if (!ReferenceEquals(pos, Config.Position))
         {
-            if (!firstRun) Logger.Info($"Stored position unusable; using default on {monitor.DeviceName}.");
-            Config.Position = pos;
-            if (save) Save();
+            if (firstRun)
+            {
+                Config.Position = pos;
+                Save();
+            }
+            else if (!ReferenceEquals(EffectivePosition, pos))
+            {
+                Logger.Info($"Stored position on {Config.Position.Monitor} is unavailable; showing the button at the default on {monitor.DeviceName} until it comes back.");
+            }
         }
-        var rect = Monitors.ButtonRect(Config.Position, monitor, Config.ButtonSizePx);
+        EffectivePosition = ReferenceEquals(pos, Config.Position) ? Config.Position : pos;
+
+        var rect = Monitors.ButtonRect(EffectivePosition, monitor, Config.ButtonSizePx);
         Button.PlaceFab(rect, monitor.Scale);
     }
 
     public void OnButtonDragEnded()
     {
         Config.Position = Monitors.FromButtonRect(Button.FabRect);
-        PlaceButtonFromConfig(save: false); // snap to the exact stored offsets
+        PlaceButton(); // snap to the exact stored offsets
         Save();
         Logger.Info($"Button moved: {Config.Position.Anchor} ({Config.Position.OffsetX},{Config.Position.OffsetY}) on {Config.Position.Monitor}");
     }
@@ -443,16 +516,16 @@ public sealed class LauncherHost : IDisposable
         var primary = Monitors.Primary();
         Config.Position = ButtonPosition.Default();
         Config.Position.Monitor = primary.DeviceName;
-        PlaceButtonFromConfig(save: false);
+        PlaceButton();
         Save();
         Logger.Info("Button position reset.");
-        if (MenuOpen && Menu is not null) { Menu.Rebuild(); Menu.Reposition(); Settings?.Reposition(); }
+        RefreshOpenWindows();
     }
 
     public void OnDisplayChanged()
     {
-        PlaceButtonFromConfig(save: true);
-        if (MenuOpen && Menu is not null) { Menu.Reposition(); Settings?.Reposition(); }
+        PlaceButton();
+        RefreshOpenWindows();
     }
 
     // ---------------------------------------------------------------- visibility (SET-3, hotkey, single instance)
@@ -499,7 +572,7 @@ public sealed class LauncherHost : IDisposable
         return false;
     }
 
-    private bool IsOurWindow(IntPtr hwnd)
+    private static bool IsOurWindow(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) return false;
         return NativeMethods.ProcessIdOf(hwnd) == (uint)Environment.ProcessId;
