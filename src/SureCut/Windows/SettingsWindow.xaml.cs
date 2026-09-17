@@ -22,6 +22,8 @@ public partial class SettingsWindow : Window
     /// <summary>Feedback from the last capture attempt; null means "derive from the bound state".</summary>
     private string? _hotkeyMessage;
 
+    private UpdateState? _renderedUpdateState;
+
     public IntPtr Hwnd => WindowStyling.Handle(this);
 
     public SettingsWindow(LauncherHost host)
@@ -112,6 +114,17 @@ public partial class SettingsWindow : Window
     private void RenderUpdate()
     {
         var u = _host.Updates;
+
+        // Progress ticks only change the percentage text. Do not re-measure or resize the
+        // window for them: DWM suspends the Acrylic backdrop while a window is being resized,
+        // and a resize on every tick left the panel flat grey for the whole download.
+        if (_renderedUpdateState == u.State && u.State == UpdateState.Downloading)
+        {
+            UpdateHint.Text = DownloadingText(u);
+            return;
+        }
+        _renderedUpdateState = u.State;
+
         VersionLabel.Text = $"SureCut {u.Installed}";
         var available = u.IsUpdateAvailable;
         NewBadge.Visibility = available && u.State is not (UpdateState.Downloading or UpdateState.ReadyToRestart) ? Visibility.Visible : Visibility.Collapsed;
@@ -125,13 +138,16 @@ public partial class SettingsWindow : Window
             UpdateState.Checking => ("Checking for updates…", "Checking…"),
             UpdateState.UpToDate => ("You're up to date.", "Check for updates"),
             UpdateState.Available => ($"Version {u.Latest} is available.", "Update"),
-            UpdateState.Downloading => ($"Downloading version {u.Latest}… {u.Progress}%", "Updating…"),
+            UpdateState.Downloading => (DownloadingText(u), "Updating…"),
             UpdateState.ReadyToRestart => ("Restarting to finish the update…", "Updating…"),
             UpdateState.Failed => (u.Error ?? "Something went wrong.", available ? "Try again" : "Check for updates"),
             _ => ("", "Check for updates"),
         };
         if (IsVisible) AutoSize();
     }
+
+    /// <summary>Fixed-width percentage so the hint keeps the same line count for the whole download.</summary>
+    private static string DownloadingText(UpdateService u) => $"Downloading version {u.Latest}… {u.Progress,3}%";
 
     private void AutoSize()
     {

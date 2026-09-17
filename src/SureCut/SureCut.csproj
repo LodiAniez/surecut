@@ -10,7 +10,7 @@
     <AssemblyName>SureCut</AssemblyName>
     <RootNamespace>SureCut</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.5</Version>
+    <Version>0.1.6</Version>
     <Product>SureCut</Product>
     <Description>SureCut floating favorites launcher</Description>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
