@@ -70,6 +70,10 @@ public static class WindowStyling
     /// </summary>
     public static void SizeToContent(Window w, FrameworkElement content, double fixedWidth = double.NaN)
     {
+        // Flush any pending layout first. Measure() returns a cached DesiredSize for elements
+        // that are still marked valid, so right after rows were added or removed deeper in the
+        // tree the root would report its old height and the window would keep it.
+        content.UpdateLayout();
         var widthConstraint = double.IsNaN(fixedWidth) ? double.PositiveInfinity : fixedWidth;
         content.Measure(new Size(widthConstraint, double.PositiveInfinity));
         var size = content.DesiredSize;
