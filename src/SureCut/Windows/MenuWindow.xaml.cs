@@ -156,11 +156,8 @@ public partial class MenuWindow : Window
 
     private void AutoSize()
     {
-        if (_sourceReady)
-        {
-            var m = Monitors.FromRect(_host.Button.FabRect);
-            Scroller.MaxHeight = Math.Max(120, m.WorkArea.Height / m.Scale - 140);
-        }
+        var m = Monitors.FromRect(_host.Button.FabRect);
+        Scroller.MaxHeight = Math.Max(120, m.WorkArea.Height / m.Scale - 140);
         WindowStyling.SizeToContent(this, Surface);
     }
 

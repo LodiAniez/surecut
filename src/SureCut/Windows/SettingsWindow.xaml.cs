@@ -151,11 +151,10 @@ public partial class SettingsWindow : Window
 
     private void AutoSize()
     {
-        if (_sourceReady)
-        {
-            var m = Monitors.FromRect(_host.Button.FabRect);
-            Scroller.MaxHeight = Math.Max(200, m.WorkArea.Height / m.Scale - 40);
-        }
+        // Cap before the first measure too: the panel is sized before it is ever shown, and
+        // without the cap a long favorites list produced a window taller than the screen.
+        var m = Monitors.FromRect(_host.Button.FabRect);
+        Scroller.MaxHeight = Math.Max(200, m.WorkArea.Height / m.Scale - 40 - 26); // 26 = surface padding
         WindowStyling.SizeToContent(this, Surface, fixedWidth: 300);
     }
 

@@ -30,10 +30,7 @@
   </Window.Resources>
 
   <Border x:Name="Surface" Background="Transparent" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0" CornerRadius="8" Padding="14,12,14,14">
-    <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-      <ScrollViewer.Resources>
-        <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}"/>
-      </ScrollViewer.Resources>
+    <ScrollViewer x:Name="Scroller" Style="{StaticResource ThinScrollViewerStyle}">
       <StackPanel>
         <TextBlock Text="Settings" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
 
