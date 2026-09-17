@@ -72,7 +72,7 @@ restarts.
 | See more than five favorites | Click **Show more** at the bottom of the list |
 | Reorder or remove | Right-click an icon → **Move up** / **Move down** / **Remove from favorites** |
 | Open the folder a program lives in | Right-click an icon → **Open file location** |
-| Move the button | Press and hold the button for a moment, then drag it anywhere |
+| Move the button | Drag it anywhere, onto any screen |
 | Settings | Click the gear at the bottom of the menu, or right-click the button |
 | Quit | Right-click the button → **Quit** |
 

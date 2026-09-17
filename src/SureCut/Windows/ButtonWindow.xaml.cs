@@ -175,8 +175,10 @@ public partial class ButtonWindow : Window
         if (!_pressed || _dragging) return;
         NativeMethods.GetCursorPos(out var p);
         var threshold = DragThresholdDip * WindowStyling.ScaleOf(this);
+        // Moving while pressed is a drag, whether or not the hold delay has elapsed. A click is a
+        // press and release without movement, so this cannot be mistaken for one.
         if (Math.Abs(p.X - _pressPoint.X) > threshold || Math.Abs(p.Y - _pressPoint.Y) > threshold)
-            _holdTimer.Stop(); // moved too early: this is a click, not a drag
+            BeginDrag();
     }
 
     private void OnLeftUp(object sender, MouseButtonEventArgs e)

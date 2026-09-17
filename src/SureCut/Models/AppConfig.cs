@@ -73,6 +73,9 @@ public sealed class ButtonPosition
     public double OffsetX { get; set; } = 20;
     public double OffsetY { get; set; } = 20;
 
+    /// <summary>True when the user never moved the button (FAB-1 default corner and offsets).</summary>
+    [JsonIgnore] public bool IsDefaultSpot => Anchor == "bottom-right" && Math.Abs(OffsetX - 20) < 0.5 && Math.Abs(OffsetY - 20) < 0.5;
+
     [JsonIgnore] public bool AnchorTop => Anchor?.StartsWith("top", StringComparison.Ordinal) == true;
     [JsonIgnore] public bool AnchorLeft => Anchor?.EndsWith("left", StringComparison.Ordinal) == true;
 

@@ -4,10 +4,20 @@ using SureCut.Models;
 
 namespace SureCut.Services;
 
-/// <summary>One physical monitor, in physical pixels, plus its effective DPI.</summary>
-public sealed record MonitorData(IntPtr Handle, string DeviceName, RECT Bounds, RECT WorkArea, bool IsPrimary, uint Dpi)
+/// <summary>
+/// One physical monitor, in physical pixels, plus its effective DPI.
+/// <see cref="DeviceName"/> (\\.\DISPLAYn) is renumbered by Windows across reboots;
+/// <see cref="StableId"/> is the monitor's device-interface path, which survives reboots
+/// as long as the monitor stays on the same port.
+/// </summary>
+public sealed record MonitorData(IntPtr Handle, string DeviceName, string StableId, RECT Bounds, RECT WorkArea, bool IsPrimary, uint Dpi)
 {
     public double Scale => Dpi / 96.0;
+
+    public bool Matches(string? storedId) =>
+        !string.IsNullOrEmpty(storedId) &&
+        (string.Equals(StableId, storedId, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(DeviceName, storedId, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>Monitor enumeration and the DATA-4 position math.</summary>
@@ -29,7 +39,7 @@ public static class Monitors
     /// Used when enumeration returns nothing (remote-session disconnect, topology transitions):
     /// a stand-in so callers keep working until WM_DISPLAYCHANGE brings the real monitors back.
     /// </summary>
-    private static readonly MonitorData Fallback = new(IntPtr.Zero, "", new RECT { Right = 1920, Bottom = 1080 }, new RECT { Right = 1920, Bottom = 1040 }, true, 96);
+    private static readonly MonitorData Fallback = new(IntPtr.Zero, "", "", new RECT { Right = 1920, Bottom = 1080 }, new RECT { Right = 1920, Bottom = 1040 }, true, 96);
 
     public static MonitorData Primary()
     {
@@ -42,11 +52,14 @@ public static class Monitors
         return all.FirstOrDefault(m => m.IsPrimary) ?? all[0];
     }
 
-    public static MonitorData? ByName(string deviceName)
+    /// <summary>Finds a monitor by stable id, or by the legacy \\.\DISPLAYn name.</summary>
+    public static MonitorData? ById(string? storedId)
     {
-        if (string.IsNullOrEmpty(deviceName)) return null;
-        return All().FirstOrDefault(m => string.Equals(m.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrEmpty(storedId)) return null;
+        return All().FirstOrDefault(m => m.Matches(storedId));
     }
+
+    public static bool IsLegacyName(string? id) => id is not null && id.StartsWith(@"\\.\DISPLAY", StringComparison.OrdinalIgnoreCase);
 
     public static MonitorData FromPoint(int x, int y)
     {
@@ -68,7 +81,23 @@ public static class Monitors
         uint dpi = 96;
         if (NativeMethods.GetDpiForMonitor(h, NativeMethods.MDT_EFFECTIVE_DPI, out var dx, out _) == 0 && dx > 0) dpi = dx;
         var work = ExcludeTaskbars(info.rcMonitor, info.rcWork, dpi);
-        return new MonitorData(h, info.szDevice, info.rcMonitor, work, (info.dwFlags & NativeMethods.MONITORINFOF_PRIMARY) != 0, dpi);
+        return new MonitorData(h, info.szDevice, StableIdFor(info.szDevice), info.rcMonitor, work, (info.dwFlags & NativeMethods.MONITORINFOF_PRIMARY) != 0, dpi);
+    }
+
+    /// <summary>Device-interface path of the monitor attached to this adapter output (\\?\DISPLAY#...).</summary>
+    private static string StableIdFor(string adapterName)
+    {
+        try
+        {
+            var dd = new DISPLAY_DEVICE { cb = Marshal.SizeOf<DISPLAY_DEVICE>() };
+            for (uint i = 0; NativeMethods.EnumDisplayDevices(adapterName, i, ref dd, NativeMethods.EDD_GET_DEVICE_INTERFACE_NAME); i++)
+            {
+                if ((dd.StateFlags & NativeMethods.DISPLAY_DEVICE_ACTIVE) != 0 && !string.IsNullOrEmpty(dd.DeviceID)) return dd.DeviceID;
+                dd = new DISPLAY_DEVICE { cb = Marshal.SizeOf<DISPLAY_DEVICE>() };
+            }
+        }
+        catch { /* fall back to the volatile name */ }
+        return adapterName;
     }
 
     /// <summary>
@@ -152,12 +181,19 @@ public static class Monitors
     /// </summary>
     public static (MonitorData Monitor, ButtonPosition Position) Resolve(ButtonPosition pos, int buttonDip)
     {
-        var monitor = ByName(pos.Monitor);
+        var monitor = ById(pos.Monitor);
+
+        // Configs written before stable ids stored \\.\DISPLAYn, which Windows renumbers across
+        // reboots. When such a config still holds the default spot, the user never chose a
+        // monitor, so the default belongs on the primary regardless of what n resolves to now.
+        if (monitor is not null && !monitor.IsPrimary && IsLegacyName(pos.Monitor) && pos.IsDefaultSpot)
+            monitor = Primary();
+
         if (monitor is null)
         {
             var primary = Primary();
             var def = ButtonPosition.Default();
-            def.Monitor = primary.DeviceName;
+            def.Monitor = primary.StableId;
             return (primary, def);
         }
 
@@ -167,7 +203,7 @@ public static class Monitors
         if (!fits)
         {
             var def = ButtonPosition.Default();
-            def.Monitor = monitor.DeviceName;
+            def.Monitor = monitor.StableId;
             return (monitor, def);
         }
         return (monitor, pos);
@@ -202,7 +238,7 @@ public static class Monitors
 
         return new ButtonPosition
         {
-            Monitor = m.DeviceName,
+            Monitor = m.StableId,
             Anchor = (top ? "top" : "bottom") + "-" + (left ? "left" : "right"),
             OffsetX = Math.Max(0, Math.Round(ox / s)),
             OffsetY = Math.Max(0, Math.Round(oy / s)),

@@ -519,6 +519,13 @@ public sealed class LauncherHost : IDisposable
                 Logger.Info($"Stored position on {Config.Position.Monitor} is unavailable; showing the button at the default on {monitor.DeviceName} until it comes back.");
             }
         }
+        else if (!string.Equals(Config.Position.Monitor, monitor.StableId, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(monitor.StableId))
+        {
+            // Migrate a legacy \\.\DISPLAYn reference to the stable id of the monitor it resolved to.
+            Logger.Info($"Monitor reference '{Config.Position.Monitor}' migrated to '{monitor.StableId}' ({monitor.DeviceName}).");
+            Config.Position.Monitor = monitor.StableId;
+            Save();
+        }
         EffectivePosition = ReferenceEquals(pos, Config.Position) ? Config.Position : pos;
 
         var rect = Monitors.ButtonRect(EffectivePosition, monitor, Config.ButtonSizePx);
@@ -537,7 +544,7 @@ public sealed class LauncherHost : IDisposable
     {
         var primary = Monitors.Primary();
         Config.Position = ButtonPosition.Default();
-        Config.Position.Monitor = primary.DeviceName;
+        Config.Position.Monitor = primary.StableId;
         PlaceButton();
         Save();
         Logger.Info("Button position reset.");

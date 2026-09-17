@@ -97,7 +97,7 @@
           <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
           <StackPanel>
             <TextBlock Style="{StaticResource RowLabel}" Text="Button position"/>
-            <TextBlock Style="{StaticResource RowHint}" Text="Move the button by holding it, then dragging."/>
+            <TextBlock Style="{StaticResource RowHint}" Text="Drag the button to move it anywhere on any screen."/>
           </StackPanel>
           <Button Grid.Column="1" Style="{StaticResource FlatButtonStyle}" Content="Reset position" Margin="12,1,0,0" VerticalAlignment="Top" Click="OnResetPosition"/>
         </Grid>
