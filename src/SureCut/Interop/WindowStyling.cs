@@ -148,7 +148,12 @@ public static class WindowStyling
         var acrylic = theme.TransparencyEnabled && TryApplyAcrylic(w, theme.IsDark);
         if (acrylic)
         {
-            surface.Background = System.Windows.Media.Brushes.Transparent;
+            // Paint the PRD tint (rgba 249,249,249,.86 light / 44,44,44,.88 dark) over the DWM
+            // backdrop rather than leaving the client fully transparent. DWM swaps the backdrop
+            // for a flat grey "inactive" fill whenever the window loses activation (file dialog,
+            // Snipping Tool, another app); with our own tint on top the surface keeps its color
+            // and only the blur behind it comes and goes.
+            surface.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "SurfaceBrush");
             surface.BorderThickness = new Thickness(0);
         }
         else
