@@ -2,6 +2,8 @@
 
 **One button. Your favorite programs. Always on top.**
 
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=000&style=flat)](https://buymeacoffee.com/louieaniez)
+
 SureCut is a tiny Windows 11 utility that puts a single round button in the corner of your
 screen. Click it and a compact list of your favorite programs pops up. Click a program and it
 opens. The button stays above every other window, so after you launch something that fills the
@@ -152,6 +154,12 @@ rather than crashing.
   60 MB on disk) and uses more memory than a framework-dependent build would. A lighter build is
   being evaluated.
 - Not yet code-signed, hence the SmartScreen warning.
+
+## Support SureCut
+
+SureCut is free and has no ads, accounts or telemetry. If it saves you a few clicks a day and
+you'd like to say thanks, you can [buy me a coffee](https://buymeacoffee.com/louieaniez).
+Bug reports and ideas in [Issues](https://github.com/LodiAniez/surecut/issues) help just as much.
 
 ---
 
